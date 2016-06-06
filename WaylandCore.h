@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 #include <wayland-client.h>
-
+#include <wayland-cursor.h>
 
 class WaylandCore {
 public:
@@ -34,7 +34,7 @@ public:
 
   // 入力に関するイベントハンドラ群.
   void seat_listener_capabilities( wl_seat* seat, uint32_t caps );
-  void pointer_handler_enter_leave( bool is_enter, wl_surface* surface, double cx, double cy );
+  void pointer_handler_enter_leave( bool is_enter, wl_surface* surface, double cx, double cy, uint32_t serial );
   void pointer_handler_move( double cx, double cy );
   void pointer_handler_button( uint32_t button, uint32_t status );
   void pointer_handler_wheel( uint32_t axis, double val );
@@ -55,6 +55,15 @@ private:
   } mSurface;
   wl_shell_surface* mShellSurface;
 
+  struct MouseCursor {
+    int cursor_x, cursor_y;
+    uint32_t serial;
+  } mCursor;
+  
+  wl_cursor_theme*  mCursorTheme;
+  wl_cursor* mDefaultCursor;
+  wl_surface* mCursorSurface;
+  
   bool mShouldClose;
   int  mWidth, mHeight;
 };

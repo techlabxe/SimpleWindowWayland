@@ -71,6 +71,7 @@ void WaylandCore::registry_listener_global(
   uint32_t version )
 {
   void* obj = 0;
+
   if( strcmp( interface, "wl_compositor" ) == 0 ) {
     obj = wl_registry_bind( reg, name, &wl_compositor_interface, 1 );
     mCompositor = static_cast<wl_compositor*>(obj);
@@ -80,6 +81,16 @@ void WaylandCore::registry_listener_global(
     obj = wl_registry_bind( reg, name, &wl_shm_interface, 1 );
     mShm = static_cast<wl_shm*>(obj);
     obj = 0;
+    
+    mCursorTheme = wl_cursor_theme_load( "default", 32, mShm );
+    mDefaultCursor = wl_cursor_theme_get_cursor( mCursorTheme, "left_ptr" );
+    mCursorSurface = wl_compositor_create_surface( mCompositor );
+    
+    wl_cursor_image* image = mDefaultCursor->images[0];
+    wl_buffer* cursor_buf = wl_cursor_image_get_buffer(image);
+    wl_surface_attach(mCursorSurface, cursor_buf, 0, 0 );
+    wl_surface_damage(mCursorSurface, 0, 0, image->width, image->height );
+    wl_surface_commit(mCursorSurface);
   }
   if( strcmp( interface, "wl_shell") == 0 ) {
     obj = wl_registry_bind( reg, name, &wl_shell_interface, 1 );

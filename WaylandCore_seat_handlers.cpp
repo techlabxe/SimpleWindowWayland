@@ -21,20 +21,20 @@ void pointer_handler_enter(
   if( core ) {
     double cx = wl_fixed_to_double(sx);
     double cy = wl_fixed_to_double(sy);
-    core->pointer_handler_enter_leave( true, surface, cx, cy );
+    core->pointer_handler_enter_leave( true, surface, cx, cy, serial );
   }
 }  
 static 
 void pointer_handler_leave(
   void* data,
   wl_pointer* pointer,
-  uint32_t setrial,
+  uint32_t serial,
   wl_surface* surface
 )
 {
   WaylandCore* core = static_cast<WaylandCore*>(data);
   if( core ) {
-    core->pointer_handler_enter_leave( false, surface, 0, 0 );
+    core->pointer_handler_enter_leave( false, surface, 0, 0, serial );
   }  
 }
 static
@@ -176,9 +176,23 @@ void WaylandCore::seat_listener_capabilities( wl_seat* seat, uint32_t caps )
 void WaylandCore::pointer_handler_enter_leave(
   bool is_enter, 
   wl_surface* surface, 
-  double cx, double cy )
+  double cx, double cy,
+  uint32_t serial  )
 {
+  mCursor.cursor_x = cx;
+  mCursor.cursor_y = cy;
+  mCursor.serial = serial;
+  
+  if( is_enter ) {
+    wl_pointer_set_cursor( mPointer, serial, mCursorSurface, 0, 0 );
 
+    wl_cursor_image* image = mDefaultCursor->images[0];
+    wl_buffer* cursor_buf = wl_cursor_image_get_buffer(image);
+    wl_surface_attach(mCursorSurface, cursor_buf, 0, 0 );
+    wl_surface_damage(mCursorSurface, 0, 0, image->width, image->height );
+    wl_surface_commit(mCursorSurface);
+    
+  }
 }
 void WaylandCore::pointer_handler_move( double cx, double cy )
 {

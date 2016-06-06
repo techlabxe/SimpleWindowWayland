@@ -12,7 +12,7 @@ SOURCES := \
 
 LIBRARYS := \
 	wayland-client \
-
+	wayland-cursor \
 
 OBJS := $(SOURCES:.cpp=.o)
 LIBS := $(addprefix -l,$(LIBRARYS) )

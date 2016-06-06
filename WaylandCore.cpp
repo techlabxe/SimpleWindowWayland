@@ -76,28 +76,6 @@ WaylandCore::~WaylandCore(){
   }
 }
 
-void WaylandCore::seat_handle_capabilities(
-  void* data,
-  wl_seat* seat, 
-  uint32_t caps )
-{
-  WaylandCore* core = static_cast<WaylandCore*>(data);
-  if( caps & WL_SEAT_CAPABILITY_POINTER ) {
-    if( core->mPointer == NULL ) {
-      core->mPointer = wl_seat_get_pointer( seat );
-    }
-  }
-  if( !(caps & WL_SEAT_CAPABILITY_POINTER) ) {
-    if( core->mPointer ) {
-      wl_pointer_destroy( core->mPointer );
-      core->mPointer = NULL;
-    }
-  }
-  
-  if( caps & WL_SEAT_CAPABILITY_KEYBOARD ) {
-    
-  }
-}
 
 static void shell_surface_handler_ping(
   void *data, 
