@@ -2,7 +2,9 @@
 
 #include <stdint.h>
 #include <wayland-client.h>
-
+#include <wayland-egl.h>
+#include <EGL/egl.h>
+#include <GLES2/gl2.h>
 
 class WaylandCore {
 public:
@@ -17,11 +19,12 @@ public:
 
   int  getWidth() const   { return mWidth; }
   int  getHeight() const  { return mHeight; }
-  void redrawWindow();
+
+  void swapBuffers();
 private:
   void createWindow( int width, int height, const char* title );  
   void setup_registry_handlers();
-  
+  void initEGL();
 private:
 
   static void seat_handle_capabilities(
@@ -48,10 +51,15 @@ private:
   wl_pointer* mPointer;
   wl_keyboard* mKeyboard;
   
+  EGLDisplay mEglDisplay;
+  EGLContext mEglContext;
+  EGLConfig  mEglConfig;
+  
+  wl_egl_window* mEglWindow;
+  
   struct Surface {
     wl_surface* surface;
-    wl_buffer*  buffer;
-    void*       memory;
+    EGLSurface  eglSurface;
   } mSurface;
   wl_shell_surface* mShellSurface;
 
