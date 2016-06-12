@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define WIDTH 640
 #define HEIGHT 480
@@ -16,8 +17,9 @@ int main() {
   if( window ) {
     window->updateWindow();
   }
-  while( core->msgloop() ) {
-    
+  while( !core->isShouldClose() ) {
+    core->pollEvents();
+    usleep(1000);
   }
 
   delete window; window = NULL;

@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <poll.h>
 
 #include "WaylandCore.h"
 
@@ -37,7 +38,8 @@ int os_create_mem( int size ) {
 }
 
 WaylandCore::WaylandCore()
-: mDisplay(NULL),mRegistry(NULL),mCompositor(NULL),mShm(NULL)
+: mDisplay(NULL),mRegistry(NULL),mCompositor(NULL),mShm(NULL),
+  mShouldClose(false)
 {
   mDisplay = wl_display_connect(NULL);
 
@@ -131,18 +133,43 @@ WaylandWindow* WaylandCore::createWindow( int width, int height, const char* tit
   return pWindow;
 }
 
-bool WaylandCore::msgloop() {
+void WaylandCore::waitEvents() {
   if( mDisplay == NULL || mRegistry == NULL ) {
-    return false;
+    mShouldClose = true;
+    return;
   }
   int ret = wl_display_dispatch(mDisplay);
   if( ret == -1 ) {
-    return false;
+    mShouldClose = true;
+    return;
   }
   
-  return true;
+  return;
 }
-
+void WaylandCore::pollEvents() {
+  if( mDisplay == NULL || mRegistry == NULL ) {
+    mShouldClose = true;
+    return;
+  }
+  pollfd fds[] = {
+    { wl_display_get_fd(mDisplay), POLLIN },
+  };
+  while( wl_display_prepare_read(mDisplay) != 0 )
+  {
+    wl_display_dispatch_pending(mDisplay);
+  }
+  wl_display_flush(mDisplay);
+  if( poll(fds,1,0) > 0 )
+  {
+    wl_display_read_events(mDisplay);
+    wl_display_dispatch_pending(mDisplay);
+  } else {
+    wl_display_cancel_read(mDisplay);
+  }
+}
+bool WaylandCore::isShouldClose() {
+  return mShouldClose;
+}
 void WaylandCore::handlerGlobal( 
   void* data,
   wl_registry* reg, 
@@ -201,7 +228,14 @@ WaylandWindow::WaylandWindow(
 
 WaylandWindow::~WaylandWindow()
 {
-
+  if( mShellSurface ) {
+    wl_shell_surface_destroy( mShellSurface );
+  }
+  if( mSurface ) {
+    wl_surface_destroy( mSurface );
+  }
+  mShellSurface = 0;
+  mSurface = 0;
 }
 
 void WaylandWindow::updateWindow()

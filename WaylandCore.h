@@ -10,7 +10,10 @@ public:
   WaylandCore();
   ~WaylandCore();
   
-  bool msgloop();
+  void waitEvents();
+  void pollEvents();
+  
+  bool isShouldClose();
 
   WaylandWindow* createWindow( int width, int height, const char* title );  
 private:
@@ -32,6 +35,7 @@ private:
   wl_shell*   mShell;
   wl_shm* mShm;
   wl_shm_pool* mShmPool;
+  bool mShouldClose;
 };
 
 class WaylandWindow {
