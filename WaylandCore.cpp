@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <poll.h>
+#include <linux/input.h>
 
 #include "WaylandCore.h"
 
@@ -37,30 +38,25 @@ int os_create_mem( int size ) {
   return fd;
 }
 
-WaylandCore::WaylandCore()
+WaylandCore::WaylandCore( int width, int height, const char* title )
 : mDisplay(NULL),mRegistry(NULL),mCompositor(NULL),mShm(NULL),
-  mShouldClose(false)
+  mSeat(NULL),mPointer(NULL),
+  mShouldClose(false),mWidth(0),mHeight(0)
 {
   mDisplay = wl_display_connect(NULL);
-
+  setup_registry_handlers();
+  
   if( mDisplay ) {
     mRegistry = wl_display_get_registry( mDisplay );
   }
-  if( mRegistry ) {
-    static wl_registry_listener listeners= {
-      handlerGlobal, handlerGlobalRemove,
-    };
-    wl_registry_add_listener( mRegistry, &listeners, this );
-  }
-  
-  if( mRegistry ) {
-    wl_display_dispatch( mDisplay );
-    wl_display_roundtrip( mDisplay );
-  }
-
+  createWindow( width, height, title );
 }
 
 WaylandCore::~WaylandCore(){
+  if( mSeat ) {
+    wl_seat_destroy( mSeat );
+    mSeat = NULL;
+  }
   if( mShm ) {
     wl_shm_destroy( mShm );
     mShm = NULL;
@@ -80,15 +76,37 @@ WaylandCore::~WaylandCore(){
   }
 }
 
+void WaylandCore::seat_handle_capabilities(
+  void* data,
+  wl_seat* seat, 
+  uint32_t caps )
+{
+  WaylandCore* core = static_cast<WaylandCore*>(data);
+  if( caps & WL_SEAT_CAPABILITY_POINTER ) {
+    if( core->mPointer == NULL ) {
+      core->mPointer = wl_seat_get_pointer( seat );
+    }
+  }
+  if( !(caps & WL_SEAT_CAPABILITY_POINTER) ) {
+    if( core->mPointer ) {
+      wl_pointer_destroy( core->mPointer );
+      core->mPointer = NULL;
+    }
+  }
+  
+  if( caps & WL_SEAT_CAPABILITY_KEYBOARD ) {
+    
+  }
+}
 
-static void handle_ping(
+static void shell_surface_handler_ping(
   void *data, 
   struct wl_shell_surface *shell_surface,
   uint32_t serial )
 {
 	wl_shell_surface_pong( shell_surface, serial );
 }
-static void handle_configure(
+static void shell_surface_handler_configure(
   void *data, 
   struct wl_shell_surface *shell_surface,
   uint32_t edges, 
@@ -96,41 +114,64 @@ static void handle_configure(
   int32_t height )
 {
 }
-static void handle_popup_done( void *data, struct wl_shell_surface *shell_surface )
+static void shell_surface_handler_popup_done( void *data, struct wl_shell_surface *shell_surface )
 {
 }
-
-WaylandWindow* WaylandCore::createWindow( int width, int height, const char* title ) {
+static void frame_redraw( void* data, wl_callback* callback, uint32_t time )
+{
+  WaylandCore* core = static_cast<WaylandCore*>(data);
+  if(core){
+	  wl_callback_destroy( callback );  
+    core->redrawWindow();
+  }
+}
+static wl_callback_listener frame_listeners = {
+  frame_redraw,
+};
+  
+void WaylandCore::createWindow( int width, int height, const char* title )
+{
+  if( mDisplay == NULL || mCompositor == NULL ) {
+    return;
+  }
   int stride = width * sizeof(uint32_t);
   int size = stride * height;
   int fd = os_create_mem( size );
   if( fd < 0 ) {
-    fprintf( stderr, "failed os_create_mem\n" );
-    return NULL;
+    return;
   }
-  
+  void* image_ptr = mmap( NULL, size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0 );
   wl_surface* surface = wl_compositor_create_surface( mCompositor );
-  if( surface == NULL ) {
-    fprintf(stderr, "can't crate surface\n");
-    return NULL;
-  }
-  void* shm_data = mmap( NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0 );
-  mShmPool = wl_shm_create_pool( mShm, fd, size );
+  wl_shm_pool* pool = wl_shm_create_pool( mShm, fd, size );
+  memset( image_ptr, 0x00, size );
+  mWidth = width;
+  mHeight = height;
   
   wl_shell_surface* shell_surface = wl_shell_get_shell_surface( mShell, surface );
-  if( shell_surface == NULL ) {
-    fprintf(stderr, "can't create shell surface\n");
-    return NULL;
-  }  
   wl_shell_surface_set_toplevel( shell_surface );
-
-  wl_buffer* wb = wl_shm_pool_create_buffer( mShmPool, 0, width, height, stride, WL_SHM_FORMAT_XRGB8888 );
-  wl_shm_pool_destroy( mShmPool ); mShmPool = 0;
-  
+  wl_buffer* wb = wl_shm_pool_create_buffer( pool, 0, width, height, stride, WL_SHM_FORMAT_XRGB8888 );
+  wl_shm_pool_destroy( pool ); pool = NULL;
   wl_shell_surface_set_title( shell_surface, title );
+
+  wl_callback* callback = wl_surface_frame( surface );
+  static wl_shell_surface_listener shell_surf_listeners = {
+    shell_surface_handler_ping,
+    shell_surface_handler_configure,
+    shell_surface_handler_popup_done,
+  };
+
   
-  WaylandWindow* pWindow = new WaylandWindow( surface, wb, shell_surface, width, height );
-  return pWindow;
+  wl_shell_surface_add_listener( shell_surface, &shell_surf_listeners, this );
+  wl_callback_add_listener( callback, &frame_listeners, this );
+  wl_surface_attach( surface, wb, 0, 0 );
+  
+  mShellSurface = shell_surface;
+  mSurface.surface = surface;
+  mSurface.buffer = wb;
+  mSurface.memory  = image_ptr;
+
+  wl_surface_damage( surface, 0, 0, mWidth, mHeight );  
+  wl_surface_commit( surface );
 }
 
 void WaylandCore::waitEvents() {
@@ -170,96 +211,56 @@ void WaylandCore::pollEvents() {
 bool WaylandCore::isShouldClose() {
   return mShouldClose;
 }
-void WaylandCore::handlerGlobal( 
-  void* data,
-  wl_registry* reg, 
-  uint32_t name, 
-  const char* interface, 
-  uint32_t version )
+
+uint32_t calcColor()
 {
-  WaylandCore* core = static_cast<WaylandCore*>(data);
-  void* obj = 0;
-  fprintf( stderr, "registry_handler %s %d\n", interface, version );
-  if( strcmp( interface, "wl_compositor") == 0 ) {
-    obj = wl_registry_bind( reg, name, &wl_compositor_interface, 1 );
-    core->mCompositor = static_cast<wl_compositor*>(obj);
-    fprintf( stderr, "Compositor : %p\n", core->mCompositor );
-    obj = 0;
+  static int hue = 0;
+  hue += 10;
+  if( hue >= 360 ) { hue = 0; }
+  
+  float max = 1.0f;
+  float min = 0.0f;
+  float s = 1.0f;
+  float v = 1.0f;
+  
+  int dh = hue / 60;
+  float p = v * (1.0f - s);
+  float q = v * (1.0f - s * (hue / 60.0f - dh) );
+  float t = v * (1.0f - s * (1.0f - (hue / 60.0f - dh ) ) );
+  
+  int r,g,b;
+  switch( dh ) {
+  case 0: r = v*255; g = t*255; b = p*255; break;
+  case 1: r = q*255; g = v*255; b = p*255; break;
+  case 2: r = p*255; g = v*255; b = t*255; break;
+  case 3: r = p*255; g = q*255; b = v*255; break;
+  case 4: r = t*255; g = p*255; b = v*255; break;
+  case 5: r = v*255; g = p*255; b = q*255; break;
   }
-  if( strcmp( interface, "wl_shm") == 0 ) {
-    obj = wl_registry_bind( reg, name, &wl_shm_interface, 1 );
-    core->mShm = static_cast<wl_shm*>(obj);
-    obj = 0;
+  return (r << 16) | (g << 8) | b;
+}
+
+void WaylandCore::redrawWindow()
+{
+  int width =  mWidth;
+  int height = mHeight;
+  wl_surface* surface = mSurface.surface;
+  static int HEIGHT = height;
+  HEIGHT -= 5;
+  if( HEIGHT < 0 ) { HEIGHT = height; }
+  wl_surface_damage( surface, 0, 0, width, HEIGHT );
+
+  
+  uint32_t val = calcColor();
+  val |= 0xFF000000;
+  for(int y=0;y<height;++y) {
+    uint8_t* p = static_cast<uint8_t*>( mSurface.memory ) + width * y * sizeof(uint32_t);
+    for(int x=0;x<width;++x) {
+      reinterpret_cast<uint32_t*>(p)[x] = val;
+    }
   }
-  if( strcmp( interface, "wl_shell") == 0 ) {
-    obj = wl_registry_bind( reg, name, &wl_shell_interface, 1 );
-    core->mShell = static_cast<wl_shell*>(obj);
-    obj = 0;
-  }
-}
-
-void WaylandCore::handlerGlobalRemove(
-  void* data,
-  wl_registry* reg,
-  uint32_t name )
-{
-   
-}
-
-
-WaylandWindow::WaylandWindow( 
-  wl_surface* surface, 
-  wl_buffer* buffer, 
-  wl_shell_surface* shell_surface, 
-  int width, int height  )
-: mSurface(surface), mBuffer(buffer),
-  mShellSurface(shell_surface),
-  mWidth(width), mHeight(height)
-{
-  static wl_shell_surface_listener listeners = {
-    handlerPing,
-    handlerConfigure,
-    handlerPopupDone,
-  };
-  wl_shell_surface_set_toplevel( shell_surface );
-  wl_shell_surface_add_listener( shell_surface, &listeners, this );
-  wl_surface_attach( mSurface, mBuffer, 0, 0 );
-}
-
-WaylandWindow::~WaylandWindow()
-{
-  if( mShellSurface ) {
-    wl_shell_surface_destroy( mShellSurface );
-  }
-  if( mSurface ) {
-    wl_surface_destroy( mSurface );
-  }
-  mShellSurface = 0;
-  mSurface = 0;
-}
-
-void WaylandWindow::updateWindow()
-{
-  wl_surface_damage( mSurface, 0, 0, mWidth, mHeight );
-  wl_surface_commit( mSurface );
-}
-
-void WaylandWindow::handlerPing( void* data, wl_shell_surface* shell_surface, uint32_t serial )
-{
-	wl_shell_surface_pong( shell_surface, serial );
-}
-void WaylandWindow::handlerConfigure( 
-  void* data, 
-  wl_shell_surface* shell_surface, 
-  uint32_t edge, 
-  int32_t width, 
-  int32_t height )
-{
- 
-}
-void WaylandWindow::handlerPopupDone(
-  void* data,
-  wl_shell_surface* shell_surface )
-{
- 
+  wl_callback* callback = wl_surface_frame( surface );
+  wl_surface_attach( surface, mSurface.buffer, 0, 0 );
+  wl_callback_add_listener( callback, &frame_listeners, this );
+  wl_surface_commit( surface ); 
 }

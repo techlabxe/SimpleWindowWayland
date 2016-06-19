@@ -6,6 +6,8 @@ all: $(TARGET)
 
 SOURCES := \
 	WaylandCore.cpp \
+	WaylandCore_registry_handlers.cpp \
+	WaylandCore_seat_handlers.cpp \
 	main.cpp \
 
 LIBRARYS := \

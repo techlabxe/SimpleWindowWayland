@@ -11,18 +11,13 @@
 #define TITLE  "SimpleWindow"
 
 int main() {
-  WaylandCore* core = new WaylandCore();
+  WaylandCore* core = new WaylandCore(WIDTH, HEIGHT, TITLE);
   
-  WaylandWindow* window = core->createWindow( WIDTH, HEIGHT, TITLE );
-  if( window ) {
-    window->updateWindow();
-  }
   while( !core->isShouldClose() ) {
     core->pollEvents();
-    usleep(1000);
+    usleep(50*1000);
   }
 
-  delete window; window = NULL;
   delete core;core = NULL;
   return 0;
 }
