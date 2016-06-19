@@ -172,6 +172,18 @@ void WaylandCore::createWindow( int width, int height, const char* title )
 
   wl_surface_damage( surface, 0, 0, mWidth, mHeight );  
   wl_surface_commit( surface );
+  
+  wl_region* region;
+  region = wl_compositor_create_region( mCompositor );
+  wl_region_subtract( region, 0, 0, 640, 480 );
+  wl_surface_set_opaque_region( surface, region );
+  wl_region_destroy( region );
+  
+  //region = wl_compositor_create_region( mCompositor );
+  //wl_region_add( region, 0, 0, 320, 240 );
+  //wl_surface_set_opaque_region( surface, region );
+  //wl_surface_set_input_region( surface, region );
+  //wl_region_destroy( region );
 }
 
 void WaylandCore::waitEvents() {
