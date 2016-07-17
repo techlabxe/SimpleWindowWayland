@@ -96,7 +96,7 @@ void DestroyResource() {
 }
 
 
-void drawCube()
+void drawCube( int width, int height )
 {
   glEnable( GL_DEPTH_TEST );
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -108,7 +108,7 @@ void drawCube()
   }
   
   glm::vec3 cameraPos = glm::vec3( 0.0, 0.0f, 10.0f );
-	glm::mat4 proj = glm::perspective<float>( 30.0f, float(WIDTH)/float(HEIGHT), 1.0f, 100.0f );
+	glm::mat4 proj = glm::perspective<float>( 30.0f, float(width)/float(height), 1.0f, 100.0f );
 	glm::mat4 view = glm::lookAt<float>( cameraPos, glm::vec3(0.0f,0.0f,0.0f), glm::vec3(0.0f,1.0f,0.0f) );
 	glm::mat4 world= glm::rotate( glm::mat4(1.0f), (float)angle, glm::vec3(0.0f,0.0f,1.0f) );
 	world= glm::rotate( world, (float) angle * 0.5f, glm::vec3( 0.0f, 0.0f, 1.0f ) );
@@ -136,13 +136,16 @@ int main() {
 
   
   while( !core->isShouldClose() ) {
+    int now_width = core->getWidth();
+    int now_height= core->getHeight();
     core->pollEvents();
     usleep(16*1000);
     
     glClearColor( 0, 0, 0.25f, 0.75f );
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+    glViewport( 0, 0, now_width, now_height );
    
-    drawCube();
+    drawCube( now_width, now_height );
     
     core->swapBuffers();
   }

@@ -62,9 +62,10 @@ void pointer_handler_button(
 {
   WaylandCore* core = static_cast<WaylandCore*>(data);
   if( core ) {
-    core->pointer_handler_button( button, status );
+    core->pointer_handler_button( button, status, serial );
   }
 }
+
 static
 void pointer_handler_axis(
   void* data,
@@ -173,36 +174,39 @@ void WaylandCore::seat_listener_capabilities( wl_seat* seat, uint32_t caps )
   }
 }
 
+
 void WaylandCore::pointer_handler_enter_leave(
   bool is_enter, 
   wl_surface* surface, 
   double cx, double cy,
   uint32_t serial  )
 {
-  mCursor.cursor_x = cx;
-  mCursor.cursor_y = cy;
+  mCursor.x = cx;
+  mCursor.y = cy;
   mCursor.serial = serial;
   
   if( is_enter ) {
-    wl_pointer_set_cursor( mPointer, serial, mCursorSurface, 0, 0 );
-
-    wl_cursor_image* image = mDefaultCursor->images[0];
-    wl_buffer* cursor_buf = wl_cursor_image_get_buffer(image);
-    wl_surface_attach(mCursorSurface, cursor_buf, 0, 0 );
-    wl_surface_damage(mCursorSurface, 0, 0, image->width, image->height );
-    wl_surface_commit(mCursorSurface);
-    
+    updateMouseCursor();
   }
 }
 void WaylandCore::pointer_handler_move( double cx, double cy )
 {
+  mCursor.x = cx; mCursor.y = cy;
   printf( "Mouse (%d, %d)\n", (int)cx, (int)cy );
+  updateMouseCursor();
 }
-void WaylandCore::pointer_handler_button( uint32_t button, uint32_t status )
+void WaylandCore::pointer_handler_button( uint32_t button, uint32_t status, uint32_t serial )
 {
   if( button == BTN_LEFT ) {
     if( status == WL_POINTER_BUTTON_STATE_PRESSED ) {
       printf( "Pointer LeftButton Pressed.\n");
+
+      int resize_type = cursorHitTest();
+      if( resize_type != WL_SHELL_SURFACE_RESIZE_NONE ) {
+        wl_shell_surface_resize( mShellSurface, mSeat, serial, resize_type );
+      } else {
+        wl_shell_surface_move( mShellSurface, mSeat, serial );
+      }
     }
     if( status == 0 ) {
       printf( "Pointer LeftButton Released.\n");

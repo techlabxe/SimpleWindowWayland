@@ -130,6 +130,11 @@ static void shell_surface_handler_configure(
   int32_t width, 
   int32_t height )
 {
+  WaylandCore* core = static_cast<WaylandCore*>(data);
+  if( core ) {
+    //fprintf( stderr, "Configure(%d,%d)\n", width, height ;
+    core->surface_handler_configure( edges, width, height );
+  }
 }
 static void shell_surface_handler_popup_done( void *data, struct wl_shell_surface *shell_surface )
 {
@@ -166,7 +171,13 @@ void WaylandCore::createWindow( int width, int height, const char* title )
     fprintf( stderr, "MakeCurrent failed.\n" );
   }
 }
-
+void WaylandCore::surface_handler_configure( uint32_t edges, int width, int height ) {
+  if( edges != 0 ) {
+    wl_egl_window_resize( mEglWindow, width, height, 0, 0);
+    mWidth = width;
+    mHeight = height;
+  }
+}
 
 
 void WaylandCore::waitEvents() {

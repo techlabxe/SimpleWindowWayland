@@ -81,16 +81,7 @@ void WaylandCore::registry_listener_global(
     obj = wl_registry_bind( reg, name, &wl_shm_interface, 1 );
     mShm = static_cast<wl_shm*>(obj);
     obj = 0;
-    
-    mCursorTheme = wl_cursor_theme_load( "default", 32, mShm );
-    mDefaultCursor = wl_cursor_theme_get_cursor( mCursorTheme, "left_ptr" );
-    mCursorSurface = wl_compositor_create_surface( mCompositor );
-    
-    wl_cursor_image* image = mDefaultCursor->images[0];
-    wl_buffer* cursor_buf = wl_cursor_image_get_buffer(image);
-    wl_surface_attach(mCursorSurface, cursor_buf, 0, 0 );
-    wl_surface_damage(mCursorSurface, 0, 0, image->width, image->height );
-    wl_surface_commit(mCursorSurface);
+    loadImageCursor();
   }
   if( strcmp( interface, "wl_shell") == 0 ) {
     obj = wl_registry_bind( reg, name, &wl_shell_interface, 1 );
@@ -103,6 +94,73 @@ void WaylandCore::registry_listener_global(
     wl_seat_add_listener( mSeat, &seat_listeners, this );
     obj = 0;
   }
+}
+
+void WaylandCore::loadImageCursor() {
+  mCursorTheme = wl_cursor_theme_load( "default", 32, mShm );
+  const char* name[] = {
+    "left_ptr", "top_side", "bottom_side",
+    "left_side", "top_left_corner", "bottom_left_corner",
+    "right_side","top_right_corner","bottom_right_corner"
+  };
+  int count = sizeof(name)/sizeof(name[0]);
+  
+  for(int i=0;i<count;++i) {
+    mCursors[i] = wl_cursor_theme_get_cursor( mCursorTheme, name[i] );
+  }
+  mCursorSurface = wl_compositor_create_surface( mCompositor );
+  mCursorIndex = 0;
+}
+void WaylandCore::updateMouseCursor()
+{
+  int resize_type = cursorHitTest();
+  
+  switch(resize_type) {
+  default:
+  case WL_SHELL_SURFACE_RESIZE_NONE:
+    mCursorIndex = 0;
+    break;
+  case WL_SHELL_SURFACE_RESIZE_TOP:
+    mCursorIndex = 1; break;
+  case WL_SHELL_SURFACE_RESIZE_BOTTOM:
+    mCursorIndex = 2; break;
+  case WL_SHELL_SURFACE_RESIZE_LEFT:
+    mCursorIndex = 3; break;
+  case WL_SHELL_SURFACE_RESIZE_TOP_LEFT:
+    mCursorIndex = 4; break;
+  case WL_SHELL_SURFACE_RESIZE_BOTTOM_LEFT:
+    mCursorIndex = 5; break;
+    
+  case WL_SHELL_SURFACE_RESIZE_RIGHT:
+    mCursorIndex = 6; break;
+  case WL_SHELL_SURFACE_RESIZE_TOP_RIGHT:
+    mCursorIndex = 7; break;
+  case WL_SHELL_SURFACE_RESIZE_BOTTOM_RIGHT:
+    mCursorIndex = 8; break;
+  }
+
+  wl_cursor_image* image = mCursors[mCursorIndex]->images[0];
+  wl_buffer* cursor_buf = wl_cursor_image_get_buffer(image);
+  wl_surface_attach(mCursorSurface, cursor_buf, 0, 0 );
+  wl_surface_damage(mCursorSurface, 0, 0, image->width, image->height );
+  wl_surface_commit(mCursorSurface);
+  
+  wl_pointer_set_cursor( mPointer, mCursor.serial, mCursorSurface, image->hotspot_x, image->hotspot_y );
+}
+
+int WaylandCore::cursorHitTest() const {
+  int resize_type = 0;
+  const int margin = 5;
+  int top = abs( mCursor.y ) < margin ? 1 : 0;
+  int bottom = abs( mCursor.y-mHeight ) < margin ? 1 : 0;
+  int left = abs( mCursor.x ) < margin ? 1 : 0;
+  int right = abs( mCursor.x-mWidth ) < margin ? 1 : 0;
+  
+  resize_type |= WL_SHELL_SURFACE_RESIZE_TOP * top;
+  resize_type |= WL_SHELL_SURFACE_RESIZE_BOTTOM * bottom;
+  resize_type |= WL_SHELL_SURFACE_RESIZE_LEFT * left;
+  resize_type |= WL_SHELL_SURFACE_RESIZE_RIGHT * right;
+  return resize_type;
 }
  
 void WaylandCore::registry_listener_global_remove(
